@@ -1,2 +1,3 @@
-# nodejs-sample-makefile-build-system
-A sample Node.js project using Make as the build system.
+# nodejs-sample-justfile-build-system
+
+A sample Node.js project using **just** as the build system.
