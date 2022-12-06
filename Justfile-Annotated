@@ -1,0 +1,87 @@
+# A Justfile for a NextJS project
+
+# https://github.com/casey/just
+# https://just.systems/man/en/chapter_1.html
+# https://cheatography.com/linux-china/cheat-sheets/justfile/
+
+# NOTE:
+# - lines beginning with @ won't print the command to standard error (the terminal) before running
+#   - we use this to "hide" the output of those commands
+#   - see: https://just.systems/man/en/chapter_18.html?highlight=standard#quick-start
+# - the comment line directly above a recipe acts as documentation when running `just -l` / `just --list`
+
+# set the default recipe to "dev", running `just` with no other args will run this recipe.
+# 
+# run the "dev" recipe
+default: dev
+
+# anything in backticks is evaluated by the shell, we use this to:
+# - get the package name from package.json with the jq command
+# - get the package version from package.json with the jq command
+# - get the location of the bin directory for this project
+# - see: https://just.systems/man/en/chapter_32.html?highlight=backtick#command-evaluation-using-backticks
+PROJECT_NAME := `jq '.name' package.json`
+PROJECT_VERSION := `jq '.version' package.json`
+NODE_BIN_DIR := `npm bin`
+
+# "deps" recipe to explicitly install project dependencies:
+# 1. echo infomation about the step to the shell
+# 2. run the `npm install` command
+# 3. echo message when done installing dependencies
+# 
+# install project dependencies
+deps:
+    @echo 'Install dependencies for {{PROJECT_NAME}}...'
+    npm install
+    @echo 'Done.'
+
+# "dev" recipe to start the server in dev mode
+# 1. takes optional param "install", if recipe is run with `just dev install`
+#   the recipe "deps" will be run first
+# 2. runs the "next dev" command using the next binary in the node bin directory
+# 
+# start server in dev mode
+dev install='false':
+    @if [[ "{{lowercase(install)}}" =~ ^(install)$ ]]; then just deps; fi
+    @{{NODE_BIN_DIR}}/next dev
+
+# "build" recipe to build the project for release:
+# 1. echo infomation about the step to the shell
+# 2. run the `npm ci` command for clean install of dependencies
+# 3. runs the "next build" command using the next binary in the node bin directory
+# 4. echo message when done building the application
+# 
+# build application for production
+build:
+    @echo 'Build project {{PROJECT_NAME}}'
+    npm ci
+    @{{NODE_BIN_DIR}}/next build
+    @echo 'Done.'
+
+# "image" recipe to build a docker container image for the project
+# 1. IMAGE_TAG is generated from the project name + version & stored in a var
+# 2. echo infomation about the step to the shell
+# 3. docker build command is used to build the image
+# 4. echo message when done building the image
+# 
+# NOTE: it is not expected that this recipe would be run directly, the workflow
+#       to likely to have it being run indirectly via `just run-image`
+# 
+# build docker image for application
+IMAGE_TAG:= PROJECT_NAME + ":" + PROJECT_VERSION
+image:
+    @echo 'Build container image for {{PROJECT_NAME}} version {{PROJECT_VERSION}}'
+    docker build --tag {{IMAGE_TAG}} .
+    @echo 'Done.'
+
+# "run-image" recipe to run the project in a docker container
+# 1. "image" recipe is a dependency, this recipe will be run first
+# 2. CONTAINER_NAME is generated from the project name + version & stored in a var
+# 3. echo infomation about the step to the shell
+# 4. docker run command is used to run the built image using the IMAGE_TAG
+# 
+# run application in a docker image
+CONTAINER_NAME := PROJECT_NAME + "-" + PROJECT_VERSION + "-instance"
+run-image: image
+    @echo 'Running container image {{PROJECT_NAME}}:{{PROJECT_VERSION}}'
+    docker run --name {{CONTAINER_NAME}} -p 3000:3000 {{IMAGE_TAG}}
